@@ -11,10 +11,34 @@ LOGO_VIDEO = MEDIA_DIR / "videos" / "logo.mp4"
 OUTPUT_DIR = MEDIA_DIR / "output"
 
 
-def concat_videos(video1_path: Path, video2_path: Path, output_path: Path) -> None:
-    """Simple video concatenation - just join two MP4 files."""
+def concat_videos(video1_path: Path, video2_path: Path, output_path: Path, trim_start: float = 0, trim_end: float = 0) -> None:
+    """Simple video concatenation - just join two MP4 files.
+    
+    Args:
+        video1_path: Path to first video (overlay)
+        video2_path: Path to second video (logo)
+        output_path: Path for output MP4
+        trim_start: Seconds to cut from beginning of overlay
+        trim_end: Seconds to cut from ending of overlay
+    """
     print(f"Loading video 1: {video1_path}")
     video1 = VideoFileClip(str(video1_path))
+    
+    # Trim overlay video if requested
+    if trim_start > 0 or trim_end > 0:
+        original_duration = video1.duration
+        trim_start = max(0, trim_start)
+        trim_end = max(0, trim_end)
+        
+        # Calculate the end time (total duration minus trim_end)
+        trim_end_time = video1.duration - trim_end
+        if trim_end_time <= trim_start:
+            print(f"Error: Trim values would remove entire video!")
+            return
+        
+        print(f"Trimming overlay: {trim_start:.2f}s from start, {trim_end:.2f}s from end")
+        video1 = video1.subclipped(trim_start, trim_end_time)
+        print(f"Overlay duration: {original_duration:.2f}s -> {video1.duration:.2f}s")
     
     print(f"Loading video 2: {video2_path}")
     video2 = VideoFileClip(str(video2_path))
@@ -49,7 +73,9 @@ def concat_videos(video1_path: Path, video2_path: Path, output_path: Path) -> No
 
 def main() -> None:
     parser = argparse.ArgumentParser(description="Simple MP4 concatenation")
-    parser.add_argument("-o", "--overlay", type=str, required=True, help="First video file")
+    parser.add_argument("-o", "--overlay", type=str, required=True, help="First video file (overlay)")
+    parser.add_argument("--start", type=float, default=0, help="Seconds to cut from beginning of overlay (default: 0)")
+    parser.add_argument("--end", type=float, default=0, help="Seconds to cut from ending of overlay (default: 0)")
     
     args = parser.parse_args()
     
@@ -64,12 +90,14 @@ def main() -> None:
     
     print("Concatenating MP4 files...")
     print(f"Video 1: {overlay_path}")
+    if args.start > 0 or args.end > 0:
+        print(f"  Trim: {args.start}s from start, {args.end}s from end")
     print(f"Video 2: {LOGO_VIDEO}\n")
     
     output_file = OUTPUT_DIR / "final_output.mp4"
     
     try:
-        concat_videos(overlay_path, LOGO_VIDEO, output_file)
+        concat_videos(overlay_path, LOGO_VIDEO, output_file, args.start, args.end)
     except Exception as e:
         print(f"Error: {e}")
         import traceback
