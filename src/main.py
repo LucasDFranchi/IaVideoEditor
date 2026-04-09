@@ -1,134 +1,79 @@
 """Main entry point for IAVideoEditor."""
 
 from pathlib import Path
-from moviepy import AudioFileClip, VideoFileClip, CompositeAudioClip, concatenate_videoclips
+from moviepy import VideoFileClip, concatenate_videoclips
 import argparse
 
 
 # Media file paths
 MEDIA_DIR = Path(__file__).parent.parent / "media"
-BACKGROUND_SONG = MEDIA_DIR / "audio" / "background_song.mp3"
 LOGO_VIDEO = MEDIA_DIR / "videos" / "logo.mp4"
 OUTPUT_DIR = MEDIA_DIR / "output"
 
 
-def concat_audio_and_video(audio_path: Path, video_path: Path, output_path: Path, volume_boost: float = 0) -> None:
-    """
-    Concatenate an audio file with a video file and output as MP4.
+def concat_videos(video1_path: Path, video2_path: Path, output_path: Path) -> None:
+    """Simple video concatenation - just join two MP4 files."""
+    print(f"Loading video 1: {video1_path}")
+    video1 = VideoFileClip(str(video1_path))
     
-    The background song plays first, followed by the logo video at the end.
+    print(f"Loading video 2: {video2_path}")
+    video2 = VideoFileClip(str(video2_path))
     
-    Args:
-        audio_path: Path to the MP3 audio file (background_song.mp3)
-        video_path: Path to the MP4 video file (logo.mp4)
-        output_path: Path where the output MP4 will be saved
-        volume_boost: Percentage to increase volume (default: 0, range: 0-100)
-    """
-    print(f"Loading audio: {audio_path}")
-    audio_clip = AudioFileClip(str(audio_path))
+    print(f"\nVideo 1 - Duration: {video1.duration:.2f}s | FPS: {video1.fps:.2f} | Size: {video1.size}")
+    print(f"Video 2 - Duration: {video2.duration:.2f}s | FPS: {video2.fps:.2f} | Size: {video2.size}")
     
-    print(f"Loading video: {video_path}")
-    video_clip = VideoFileClip(str(video_path))
+    # Make sure videos have matching fps and size
+    target_fps = video1.fps
+    target_size = video1.size
     
-    # Get durations
-    audio_duration = audio_clip.duration
-    video_duration = video_clip.duration
+    print(f"\nNote: Video 2 will be resized to {target_size} to match Video 1")
     
-    print(f"Audio duration: {audio_duration:.2f}s")
-    print(f"Video duration: {video_duration:.2f}s")
+    # Set new size but keep original duration
+    video2_resized = video2.resized((target_size[0], target_size[1]))
+    print(f"Video 2 duration after resize: {video2_resized.duration:.2f}s (should still be {video2.duration:.2f}s)")
     
-    # Create a black frame/placeholder for the audio duration
-    from moviepy import ColorClip
+    # Concatenate
+    final = concatenate_videoclips([video1, video2_resized])
     
-    # Get video size from the logo video
-    video_width, video_height = video_clip.size
+    print(f"Final duration after concat: {final.duration:.2f}s (expected: {video1.duration + video2.duration:.2f}s)")
+    print(f"Writing to: {output_path}")
     
-    # Create a black placeholder video for the first part (audio duration)
-    placeholder = ColorClip(size=(video_width, video_height), color=(0, 0, 0), duration=audio_duration)
-    
-    # Concatenate: placeholder video + logo video
-    final_video = concatenate_videoclips([placeholder, video_clip])
-    
-    # Adjust audio volume based on boost percentage
-    volume_multiplier = 1 + (volume_boost / 100)
-    audio_clip_adjusted = audio_clip.with_volume_scaled(volume_multiplier)
-    
-    print(f"Volume boost: +{volume_boost}% (multiplier: {volume_multiplier:.2f}x)")
-    
-    # Set the audio to just the audio clip (it will play during the placeholder part)
-    final_video = final_video.with_audio(audio_clip_adjusted)
-    
-    # Ensure output directory exists
     output_path.parent.mkdir(parents=True, exist_ok=True)
+    final.write_videofile(str(output_path), fps=target_fps, codec='libx264', audio_codec='aac')
     
-    print(f"\nWriting output to: {output_path}")
-    final_video.write_videofile(str(output_path))
+    print(f"Success: {output_path}")
     
-    print(f"✓ Output file created successfully: {output_path}")
-    
-    # Clean up
-    audio_clip.close()
-    video_clip.close()
+    video1.close()
+    video2.close()
 
 
 def main() -> None:
-    """Run the IAVideoEditor application."""
-    # Parse command-line arguments
-    parser = argparse.ArgumentParser(
-        description="IAVideoEditor - Concatenate audio and video files",
-        formatter_class=argparse.RawDescriptionHelpFormatter,
-        epilog="""
-Examples:
-  python -m src.main                    # Default (no volume boost)
-  python -m src.main -s 10              # Increase volume by 10%
-  python -m src.main --sound 25         # Increase volume by 25%
-        """
-    )
-    parser.add_argument(
-        "-s", "--sound",
-        type=float,
-        default=0,
-        help="Sound volume increase percentage (0-100, default: 0)"
-    )
+    parser = argparse.ArgumentParser(description="Simple MP4 concatenation")
+    parser.add_argument("-o", "--overlay", type=str, required=True, help="First video file")
     
     args = parser.parse_args()
     
-    # Validate volume boost
-    if not 0 <= args.sound <= 200:
-        print(f"✗ Invalid sound boost value: {args.sound}. Must be between 0 and 200.")
+    overlay_path = Path(args.overlay)
+    if not overlay_path.exists():
+        print(f"Error: File not found: {overlay_path}")
         return
     
-    print("IAVideoEditor - Welcome!")
-    print("This is the main entry point for the video editing application.")
-    
-    # Display media file paths
-    print(f"\nMedia files location: {MEDIA_DIR}")
-    print(f"Background song: {BACKGROUND_SONG}")
-    print(f"Logo video: {LOGO_VIDEO}")
-    
-    # Check if media files exist
-    if BACKGROUND_SONG.exists():
-        print(f"✓ Background song found: {BACKGROUND_SONG}")
-    else:
-        print(f"✗ Background song not found: {BACKGROUND_SONG}")
+    if not LOGO_VIDEO.exists():
+        print(f"Error: File not found: {LOGO_VIDEO}")
         return
     
-    if LOGO_VIDEO.exists():
-        print(f"✓ Logo video found: {LOGO_VIDEO}")
-    else:
-        print(f"✗ Logo video not found: {LOGO_VIDEO}")
-        return
+    print("Concatenating MP4 files...")
+    print(f"Video 1: {overlay_path}")
+    print(f"Video 2: {LOGO_VIDEO}\n")
     
-    # Create output
     output_file = OUTPUT_DIR / "final_output.mp4"
-    print(f"\n{'='*50}")
-    print("Starting concatenation process...")
-    print(f"{'='*50}")
     
     try:
-        concat_audio_and_video(BACKGROUND_SONG, LOGO_VIDEO, output_file, args.sound)
+        concat_videos(overlay_path, LOGO_VIDEO, output_file)
     except Exception as e:
-        print(f"✗ Error during concatenation: {e}")
+        print(f"Error: {e}")
+        import traceback
+        traceback.print_exc()
 
 
 if __name__ == "__main__":
