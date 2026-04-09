@@ -1,23 +1,25 @@
 """Main entry point for IAVideoEditor."""
 
 from pathlib import Path
-from moviepy import VideoFileClip, concatenate_videoclips
+from moviepy import VideoFileClip, AudioFileClip, concatenate_videoclips, concatenate_audioclips, CompositeAudioClip
 import argparse
 
 
 # Media file paths
 MEDIA_DIR = Path(__file__).parent.parent / "media"
 LOGO_VIDEO = MEDIA_DIR / "videos" / "logo.mp4"
+BACKGROUND_SONG = MEDIA_DIR / "audio" / "background_song.mp3"
 OUTPUT_DIR = MEDIA_DIR / "output"
 
 
-def concat_videos(video1_path: Path, video2_path: Path, output_path: Path, trim_start: float = 0, trim_end: float = 0) -> None:
-    """Simple video concatenation - just join two MP4 files.
+def concat_videos(video1_path: Path, video2_path: Path, output_path: Path, audio_path: Path = None, trim_start: float = 0, trim_end: float = 0) -> None:
+    """Simple video concatenation - just join two MP4 files with optional background audio.
     
     Args:
         video1_path: Path to first video (overlay)
         video2_path: Path to second video (logo)
         output_path: Path for output MP4
+        audio_path: Path to background audio file
         trim_start: Seconds to cut from beginning of overlay
         trim_end: Seconds to cut from ending of overlay
     """
@@ -60,6 +62,54 @@ def concat_videos(video1_path: Path, video2_path: Path, output_path: Path, trim_
     final = concatenate_videoclips([video1, video2_resized])
     
     print(f"Final duration after concat: {final.duration:.2f}s (expected: {video1.duration + video2.duration:.2f}s)")
+    
+    # Handle audio: mix video audio with background audio
+    audio_streams = []
+    video_duration = final.duration
+    
+    # Add original video audio if it exists
+    if final.audio is not None:
+        print(f"\nOriginal video audio duration: {final.audio.duration:.2f}s")
+        audio_streams.append(final.audio.with_start(0))
+    
+    # Add background audio if provided
+    if audio_path and audio_path.exists():
+        print(f"Loading background audio: {audio_path}")
+        bg_audio = AudioFileClip(str(audio_path))
+        print(f"Background audio duration: {bg_audio.duration:.2f}s")
+        
+        # Adjust background audio to match video duration
+        if bg_audio.duration < video_duration:
+            # Loop the audio to match video duration
+            print(f"Looping background audio from {bg_audio.duration:.2f}s to {video_duration:.2f}s...")
+            
+            # Calculate how many repetitions we need
+            repetitions = int(video_duration / bg_audio.duration) + 1
+            
+            # Create list of audio clips to concatenate
+            audio_clips = [bg_audio] * repetitions
+            looped_audio = concatenate_audioclips(audio_clips)
+            
+            # Trim to exact video duration
+            bg_audio_adjusted = looped_audio.subclipped(0, video_duration)
+        else:
+            # Cut audio to match video duration
+            print(f"Trimming background audio from {bg_audio.duration:.2f}s to {video_duration:.2f}s...")
+            bg_audio_adjusted = bg_audio.subclipped(0, video_duration)
+        
+        print(f"Adjusted background audio duration: {bg_audio_adjusted.duration:.2f}s")
+        audio_streams.append(bg_audio_adjusted.with_start(0))
+    
+    # Mix all audio streams
+    if audio_streams:
+        if len(audio_streams) > 1:
+            print(f"\nMixing {len(audio_streams)} audio tracks together...")
+            final_audio = CompositeAudioClip(audio_streams)
+        else:
+            final_audio = audio_streams[0]
+        
+        final = final.with_audio(final_audio)
+    
     print(f"Writing to: {output_path}")
     
     output_path.parent.mkdir(parents=True, exist_ok=True)
@@ -72,10 +122,11 @@ def concat_videos(video1_path: Path, video2_path: Path, output_path: Path, trim_
 
 
 def main() -> None:
-    parser = argparse.ArgumentParser(description="Simple MP4 concatenation")
+    parser = argparse.ArgumentParser(description="Video concatenation with background audio")
     parser.add_argument("-o", "--overlay", type=str, required=True, help="First video file (overlay)")
     parser.add_argument("--start", type=float, default=0, help="Seconds to cut from beginning of overlay (default: 0)")
     parser.add_argument("--end", type=float, default=0, help="Seconds to cut from ending of overlay (default: 0)")
+    parser.add_argument("--no-audio", action="store_true", help="Disable background audio")
     
     args = parser.parse_args()
     
@@ -88,16 +139,24 @@ def main() -> None:
         print(f"Error: File not found: {LOGO_VIDEO}")
         return
     
+    if not args.no_audio and not BACKGROUND_SONG.exists():
+        print(f"Error: Background song not found: {BACKGROUND_SONG}")
+        return
+    
     print("Concatenating MP4 files...")
     print(f"Video 1: {overlay_path}")
     if args.start > 0 or args.end > 0:
         print(f"  Trim: {args.start}s from start, {args.end}s from end")
-    print(f"Video 2: {LOGO_VIDEO}\n")
+    print(f"Video 2: {LOGO_VIDEO}")
+    if not args.no_audio:
+        print(f"Background audio: {BACKGROUND_SONG}")
+    print()
     
     output_file = OUTPUT_DIR / "final_output.mp4"
     
     try:
-        concat_videos(overlay_path, LOGO_VIDEO, output_file, args.start, args.end)
+        audio = None if args.no_audio else BACKGROUND_SONG
+        concat_videos(overlay_path, LOGO_VIDEO, output_file, audio, args.start, args.end)
     except Exception as e:
         print(f"Error: {e}")
         import traceback
