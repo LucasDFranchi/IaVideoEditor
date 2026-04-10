@@ -59,6 +59,9 @@ def generate_subtitles(video_path: Path, subtitle_path: Path, language: str = "p
     Returns:
         List of subtitle segments
     """
+    # Ensure paths are Path objects
+    video_path = Path(video_path) if not isinstance(video_path, Path) else video_path
+    subtitle_path = Path(subtitle_path) if not isinstance(subtitle_path, Path) else subtitle_path
     try:
         import whisper
         import librosa
@@ -132,6 +135,10 @@ def embed_subtitles(video_path: Path, segments: list, output_path: Path) -> None
         segments: List of subtitle segments from Whisper
         output_path: Path to save video with embedded subtitles
     """
+    # Ensure paths are Path objects
+    video_path = Path(video_path) if not isinstance(video_path, Path) else video_path
+    output_path = Path(output_path) if not isinstance(output_path, Path) else output_path
+    
     print(f"\nEmbedding subtitles into video...")
     video = VideoFileClip(str(video_path))
     
@@ -197,6 +204,12 @@ def concat_videos(video1_path: Path, video2_path: Path, output_path: Path, audio
         trim_end: Seconds to cut from ending of overlay
         subtitle_segments: List of subtitle segments to embed
     """
+    # Ensure all paths are Path objects (may come as strings from CLI/GUI)
+    video1_path = Path(video1_path) if not isinstance(video1_path, Path) else video1_path
+    video2_path = Path(video2_path) if not isinstance(video2_path, Path) else video2_path
+    output_path = Path(output_path) if not isinstance(output_path, Path) else output_path
+    audio_path = Path(audio_path) if audio_path and not isinstance(audio_path, Path) else audio_path
+    
     print(f"Loading video 1: {video1_path}")
     video1 = VideoFileClip(str(video1_path))
     
