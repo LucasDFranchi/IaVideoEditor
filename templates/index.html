@@ -1,0 +1,136 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Editor de Vídeo IA</title>
+    <link rel="stylesheet" href="{{ url_for('static', filename='style.css') }}">
+</head>
+<body>
+    <div class="container">
+        <!-- Header -->
+        <header class="header">
+            <h1>🎥 Editor de Vídeo IA</h1>
+            <p>Edite seus vídeos de forma simples e rápida</p>
+        </header>
+
+        <!-- Main Content -->
+        <main class="main-content">
+            <!-- Left: Video Preview -->
+            <section class="section video-section">
+                <h2>📹 Vídeo</h2>
+                <div class="video-container">
+                    <video id="video-preview" controls>
+                        <p>Seu navegador não suporta vídeo HTML5</p>
+                    </video>
+                </div>
+                <p class="helper-text" id="video-helper">Faça upload de um vídeo para visualizar</p>
+            </section>
+
+            <!-- Right: Workflow Steps -->
+            <section class="section workflow-section">
+                <!-- Step 1: Upload Base Video -->
+                <div class="step">
+                    <div class="step-header">
+                        <h3>📹 Passo 1: Selecionar Vídeo Principal</h3>
+                    </div>
+                    <div class="step-content">
+                        <div class="file-input-group">
+                            <input 
+                                type="file" 
+                                id="video-input" 
+                                accept="video/*"
+                                class="file-input"
+                            >
+                            <label for="video-input" class="file-label">
+                                📂 Escolher Vídeo
+                            </label>
+                        </div>
+                        <p class="file-name" id="video-name">Nenhum arquivo selecionado</p>
+                    </div>
+                </div>
+
+                <!-- Step 2: Configure -->
+                <div class="step">
+                    <div class="step-header">
+                        <h3>⚙️ Passo 2: Configurações</h3>
+                    </div>
+                    <div class="step-content">
+                        <!-- Trim Settings -->
+                        <div class="config-group">
+                            <label for="trim-start">Início do Corte (segundos)</label>
+                            <input 
+                                type="number" 
+                                id="trim-start" 
+                                min="0" 
+                                value="0"
+                                class="input-number"
+                            >
+                        </div>
+
+                        <div class="config-group">
+                            <label for="trim-end">Fim do Corte (segundos)</label>
+                            <input 
+                                type="number" 
+                                id="trim-end" 
+                                min="0" 
+                                value="0"
+                                class="input-number"
+                            >
+                        </div>
+
+                        <!-- Output Filename -->
+                        <div class="config-group">
+                            <label for="output-name">Nome do Arquivo de Saída</label>
+                            <input 
+                                type="text" 
+                                id="output-name" 
+                                value="video_editado.mp4"
+                                class="input-text"
+                                placeholder="video_editado.mp4"
+                            >
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Step 3: Process -->
+                <div class="step">
+                    <div class="step-header">
+                        <h3>🚀 Passo 3: Gerar Vídeo</h3>
+                    </div>
+                    <div class="step-content">
+                        <button id="process-btn" class="btn btn-primary btn-large">
+                            ✓ Gerar Vídeo
+                        </button>
+                        <p class="helper-text">Clique para processar o vídeo com o overlay</p>
+                        
+                        <!-- Progress Bar (Inside Step 3) -->
+                        <div id="progress-container" style="display: none; margin-top: 15px;">
+                            <p class="status-message" id="status-message" style="margin-bottom: 8px;">Processando...</p>
+                            <div class="progress-bar">
+                                <div class="progress-fill" id="progress-fill"></div>
+                            </div>
+                            <p class="progress-text" id="progress-text">0%</p>
+                        </div>
+                    </div>
+                </div>
+            </section>
+
+            <!-- Success Message -->
+            <section class="section success-section" id="success-section" style="display: none;">
+                <div class="success-box">
+                    <h2>✓ Processado!</h2>
+                    <p id="success-message">Seu vídeo foi salvo em ~/Desktop/videos_formatados/</p>
+                </div>
+            </section>
+        </main>
+
+        <!-- Footer -->
+        <footer class="footer">
+            <p>© 2024 Editor de Vídeo IA - Feito para você</p>
+        </footer>
+    </div>
+
+    <script src="{{ url_for('static', filename='app.js') }}"></script>
+</body>
+</html>

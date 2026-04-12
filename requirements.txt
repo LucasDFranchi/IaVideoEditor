@@ -1,5 +1,9 @@
 # Core dependencies
 moviepy>=1.0.3
 
-# GUI dependencies
-PyQt6>=6.4.0
+# Desktop GUI
+pywebview>=5.0
+pythonnet>=3.0.0
+
+# Build
+pyinstaller>=6.0
