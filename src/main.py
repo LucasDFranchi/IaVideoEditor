@@ -1,11 +1,11 @@
-"""Main entry point for IAVideoEditor."""
+"""Ponto de entrada principal do IAVideoEditor."""
 
 from pathlib import Path
 from moviepy import VideoFileClip, AudioFileClip, concatenate_videoclips, concatenate_audioclips, CompositeAudioClip, TextClip, CompositeVideoClip
 import argparse
 
 
-# Media file paths
+# Caminhos de arquivos de mídias
 MEDIA_DIR = Path(__file__).parent.parent / "media"
 LOGO_VIDEO = MEDIA_DIR / "videos" / "logo.mp4"
 BACKGROUND_SONG = MEDIA_DIR / "audio" / "background_song.mp3"
@@ -14,14 +14,14 @@ SUBTITLES_DIR = OUTPUT_DIR / "subtitles"
 
 
 def break_into_small_lines(text: str, max_chars: int = 50) -> str:
-    """Break text into smaller lines for better readability.
+    """Quebrar texto em linhas menores para melhor legibilidade.
     
     Args:
-        text: Text to break into lines
-        max_chars: Maximum characters per line (default: 50)
+        text: Texto a ser quebrado em linhas
+        max_chars: Máximo de caracteres por linha (padrão: 50)
         
     Returns:
-        Text with line breaks inserted
+        Texto com quebras de linha inseridas
     """
     words = text.split()
     lines = []
@@ -29,19 +29,19 @@ def break_into_small_lines(text: str, max_chars: int = 50) -> str:
     current_length = 0
     
     for word in words:
-        # Check if adding this word would exceed the limit
+        # Verificar se adicionar esta palavra excederia o limite
         word_length = len(word)
         if current_length + word_length + len(current_line) > max_chars and current_line:
-            # Start a new line
+            # Começar uma nova linha
             lines.append(' '.join(current_line))
             current_line = [word]
             current_length = word_length
         else:
-            # Add word to current line
+            # Adicionar palavra à linha atual
             current_line.append(word)
             current_length += word_length
     
-    # Add the last line
+    # Adicionar a última linha
     if current_line:
         lines.append(' '.join(current_line))
     
@@ -49,32 +49,33 @@ def break_into_small_lines(text: str, max_chars: int = 50) -> str:
 
 
 def generate_subtitles(video_path: Path, subtitle_path: Path, language: str = "pt") -> list:
-    """Generate SRT subtitles from video audio using Whisper AI (FREE, open-source, no API keys needed).
+    """Gerar subtítulos do áudio do vídeo usando openai-whisper (LIVRE, código aberto, sem chaves de API necessárias).
     
     Args:
-        video_path: Path to video file
-        subtitle_path: Path to save SRT subtitles
-        language: Language code (default: "pt" for Portuguese)
+        video_path: Caminho para o arquivo de vídeo
+        subtitle_path: Caminho para salvar subtítulos SRT (para backup, não utilizado no vídeo)
+        language: Código de idioma (padrão: "pt" para Português)
         
     Returns:
-        List of subtitle segments
+        Lista de segmentos de subtítulo com chaves 'start', 'end' e 'text'
     """
-    # Ensure paths are Path objects
+    # Garantir que os caminhos sejam objetos Path
     video_path = Path(video_path) if not isinstance(video_path, Path) else video_path
     subtitle_path = Path(subtitle_path) if not isinstance(subtitle_path, Path) else subtitle_path
+    
     try:
         import whisper
         import librosa
     except ImportError:
-        print("Error: Required modules not found. Install with: pip install openai-whisper librosa")
+        print("Erro: Módulos necessários não encontrados. Instale com: pip install openai-whisper librosa")
         return None
     
     import tempfile
     
-    print(f"\nGenerating subtitles ({language})...")
+    print(f"\nGerando subtítulos ({language})...")
     
-    # Extract audio from video using moviepy
-    print("Extracting audio from video...")
+    # Extrair áudio do vídeo usando moviepy
+    print("Extraindo áudio do vídeo...")
     video = VideoFileClip(str(video_path))
     temp_dir = Path(tempfile.gettempdir())
     temp_audio = temp_dir / "whisper_temp_audio.mp3"
@@ -82,47 +83,28 @@ def generate_subtitles(video_path: Path, subtitle_path: Path, language: str = "p
     try:
         video.audio.write_audiofile(str(temp_audio))
         
-        print(f"Loading Whisper model (this may take a moment on first run)...")
+        print(f"Carregando modelo Whisper...")
         model = whisper.load_model("base")
         
-        print(f"Transcribing audio...")
-        # Load audio using librosa and pass as numpy array
+        print(f"Transcrevendo áudio...")
+        # Carregar áudio usando librosa e passar como array numpy
         audio_data, sr = librosa.load(str(temp_audio), sr=16000)
         result = model.transcribe(audio_data, language=language)
         
-        def format_time(t: float) -> str:
-            """Format time in SRT format (HH:MM:SS,mmm)."""
-            hours = int(t // 3600)
-            minutes = int((t % 3600) // 60)
-            seconds = int(t % 60)
-            milliseconds = int((t % 1) * 1000)
-            return f"{hours:02}:{minutes:02}:{seconds:02},{milliseconds:03}"
+        # Converter para formato de segmentos correspondente ao saída do faster-whisper
+        segments_list = []
+        for segment in result["segments"]:
+            segments_list.append({
+                "start": segment["start"],
+                "end": segment["end"],
+                "text": segment["text"].strip()
+            })
         
-        print(f"Writing subtitles to: {subtitle_path}")
-        subtitle_path.parent.mkdir(parents=True, exist_ok=True)
-        
-        with open(subtitle_path, "w", encoding="utf-8") as f:
-            for i, segment in enumerate(result["segments"], start=1):
-                start = segment["start"]
-                end = segment["end"]
-                text = segment["text"].strip()
-                
-                # Ensure text is properly encoded (handle bytes if needed)
-                if isinstance(text, bytes):
-                    text = text.decode('utf-8')
-                
-                # Break text into smaller lines for better readability
-                text = break_into_small_lines(text, max_chars=50)
-                
-                f.write(f"{i}\n")
-                f.write(f"{format_time(start)} --> {format_time(end)}\n")
-                f.write(f"{text}\n\n")
-        
-        print(f"Subtitles saved: {subtitle_path}")
-        return result["segments"]  # Return segments for embedding
+        print(f"Transcrição de {len(segments_list)} segmentos")
+        return segments_list
     finally:
         video.close()
-        # Clean up temp audio file
+        # Limpar arquivo de áudio temporário
         if temp_audio.exists():
             temp_audio.unlink()
 
@@ -132,7 +114,7 @@ def embed_subtitles(video_path: Path, segments: list, output_path: Path) -> None
     
     Args:
         video_path: Path to video file
-        segments: List of subtitle segments from Whisper
+        segments: List of subtitle segments from faster-whisper
         output_path: Path to save video with embedded subtitles
     """
     # Ensure paths are Path objects
@@ -143,44 +125,35 @@ def embed_subtitles(video_path: Path, segments: list, output_path: Path) -> None
     video = VideoFileClip(str(video_path))
     
     # Create text clips for each subtitle
-    text_clips = []
+    caption_clips = []
     
     for segment in segments:
-        start_time = segment["start"]
-        end_time = segment["end"]
-        text = segment["text"].strip()
+        txt = segment["text"].strip()
         
-        # Ensure text is properly encoded (handle bytes if needed)
-        if isinstance(text, bytes):
-            text = text.decode('utf-8')
+        if not txt:  # Skip empty segments
+            continue
         
-        # Break text into smaller lines for better readability
-        text = break_into_small_lines(text, max_chars=50)
-        
-        # Create text clip using correct moviepy 2.2.1 parameters
-        # Note: font_size (with underscore), not fontsize
-        # Use Arial font with full path for special character support
-        # Add larger font size and border (stroke) for better visibility
-        txt_clip = TextClip(
-            text=text,
-            font_size=40,  # Increased from 20 for larger text
-            color='white',
-            size=(video.w - 80, None),  # Reduced width from w-40 to w-80 for better wrapping
-            method='label',
-            font='C:/Windows/Fonts/arial.ttf',
-            stroke_color='black',  # Border color
-            stroke_width=2  # Border thickness
+        # Create caption clip with automatic wrapping
+        caption = (
+            TextClip(
+                text=txt,
+                font_size=50,
+                size=(int(video.w * 0.8), None),  # 80% of video width for automatic wrapping
+                method="caption",  # Enables word wrapping
+                color='white',
+                stroke_color='black',
+                stroke_width=2
+            )
+            .with_position(("center", "bottom"))  # Centered horizontally, positioned at bottom
+            .with_start(segment["start"])
+            .with_end(segment["end"])
         )
         
-        # Position at bottom center with more space for wrapped text
-        txt_clip = txt_clip.with_position(('center', video.h - 220))
-        txt_clip = txt_clip.with_start(start_time).with_end(end_time)
-        
-        text_clips.append(txt_clip)
+        caption_clips.append(caption)
     
-    # Composite video with text
-    if text_clips:
-        final_video = CompositeVideoClip([video.without_audio()] + text_clips).with_audio(video.audio)
+    # Composite video with captions
+    if caption_clips:
+        final_video = CompositeVideoClip([video] + caption_clips)
     else:
         final_video = video
     
@@ -192,132 +165,115 @@ def embed_subtitles(video_path: Path, segments: list, output_path: Path) -> None
     print(f"Success: Video with embedded subtitles saved to {output_path}")
 
 
-def concat_videos(video1_path: Path, video2_path: Path, output_path: Path, audio_path: Path = None, trim_start: float = 0, trim_end: float = 0, subtitle_segments: list = None) -> None:
-    """Simple video concatenation - just join two MP4 files with optional background audio and subtitles.
+def concat_videos(video1_path: Path, video2_path: Path, output_path: Path, audio_path: Path = None, trim_start: float = 0, trim_end: float = 0) -> None:
+    """Concatenar dois arquivos MP4 com áudio de fundo opcional.
     
     Args:
-        video1_path: Path to first video (overlay)
-        video2_path: Path to second video (logo)
-        output_path: Path for output MP4
-        audio_path: Path to background audio file
-        trim_start: Seconds to cut from beginning of overlay
-        trim_end: Seconds to cut from ending of overlay
-        subtitle_segments: List of subtitle segments to embed
+        video1_path: Caminho para o primeiro vídeo (overlay)
+        video2_path: Caminho para o segundo vídeo (logo)
+        output_path: Caminho para saída do MP4
+        audio_path: Caminho para o arquivo de áudio de fundo
+        trim_start: Segundos a cortar do início do overlay
+        trim_end: Segundos a cortar do fim do overlay
     """
-    # Ensure all paths are Path objects (may come as strings from CLI/GUI)
+    # Garantir que todos os caminhos sejam objetos Path (podem vir como strings de CLI/GUI)
     video1_path = Path(video1_path) if not isinstance(video1_path, Path) else video1_path
     video2_path = Path(video2_path) if not isinstance(video2_path, Path) else video2_path
     output_path = Path(output_path) if not isinstance(output_path, Path) else output_path
     audio_path = Path(audio_path) if audio_path and not isinstance(audio_path, Path) else audio_path
     
-    print(f"Loading video 1: {video1_path}")
+    print(f"Carregando vídeo 1: {video1_path}")
     video1 = VideoFileClip(str(video1_path))
     
-    # Trim overlay video if requested
+    # Cortar vídeo overlay se solicitado
     if trim_start > 0 or trim_end > 0:
         original_duration = video1.duration
         trim_start = max(0, trim_start)
         trim_end = max(0, trim_end)
         
-        # Calculate the end time (total duration minus trim_end)
+        # Calcular o tempo final (duração total menos trim_end)
         trim_end_time = video1.duration - trim_end
         if trim_end_time <= trim_start:
-            print(f"Error: Trim values would remove entire video!")
+            print(f"Erro: Os valores de corte removeriam todo o vídeo!")
             return
         
-        print(f"Trimming overlay: {trim_start:.2f}s from start, {trim_end:.2f}s from end")
+        print(f"Cortando overlay: {trim_start:.2f}s do início, {trim_end:.2f}s do fim")
         video1 = video1.subclipped(trim_start, trim_end_time)
-        print(f"Overlay duration: {original_duration:.2f}s -> {video1.duration:.2f}s")
+        print(f"Duração do overlay: {original_duration:.2f}s -> {video1.duration:.2f}s")
     
-    print(f"Loading video 2: {video2_path}")
+    print(f"Carregando vídeo 2: {video2_path}")
     video2 = VideoFileClip(str(video2_path))
     
-    print(f"\nVideo 1 - Duration: {video1.duration:.2f}s | FPS: {video1.fps:.2f} | Size: {video1.size}")
-    print(f"Video 2 - Duration: {video2.duration:.2f}s | FPS: {video2.fps:.2f} | Size: {video2.size}")
+    print(f"\nVídeo 1 - Duração: {video1.duration:.2f}s | FPS: {video1.fps:.2f} | Tamanho: {video1.size}")
+    print(f"Vídeo 2 - Duração: {video2.duration:.2f}s | FPS: {video2.fps:.2f} | Tamanho: {video2.size}")
     
-    # Make sure videos have matching fps and size
+    # Garantir que os vídeos tenham fps e tamanho correspondentes
     target_fps = video1.fps
     target_size = video1.size
     
-    print(f"\nNote: Video 2 will be resized to {target_size} to match Video 1")
+    print(f"\nNota: O Vídeo 2 será redimensionado para {target_size} para correspondencer ao Vídeo 1")
     
-    # Set new size but keep original duration
+    # Definir novo tamanho mas manter duração original
     video2_resized = video2.resized((target_size[0], target_size[1]))
-    print(f"Video 2 duration after resize: {video2_resized.duration:.2f}s (should still be {video2.duration:.2f}s)")
+    print(f"Duração do Vídeo 2 após redimensionamento: {video2_resized.duration:.2f}s (deve ainda ser {video2.duration:.2f}s)")
     
-    # Concatenate
+    # Concatenar
     final = concatenate_videoclips([video1, video2_resized])
     
-    print(f"Final duration after concat: {final.duration:.2f}s (expected: {video1.duration + video2.duration:.2f}s)")
+    print(f"Duração final após concatenação: {final.duration:.2f}s (esperado: {video1.duration + video2.duration:.2f}s)")
     
-    # Handle audio: mix video audio with background audio
+    # Lidar com áudio: misturar áudio do vídeo com áudio de fundo
     audio_streams = []
     video_duration = final.duration
     
-    # Add original video audio if it exists
+    # Adicionar áudio do vídeo original se existir
     if final.audio is not None:
-        print(f"\nOriginal video audio duration: {final.audio.duration:.2f}s")
+        print(f"\nDuração do áudio do vídeo original: {final.audio.duration:.2f}s")
         audio_streams.append(final.audio.with_start(0))
     
-    # Add background audio if provided
+    # Adicionar áudio de fundo se fornecido
     if audio_path and audio_path.exists():
-        print(f"Loading background audio: {audio_path}")
+        print(f"Carregando áudio de fundo: {audio_path}")
         bg_audio = AudioFileClip(str(audio_path))
-        print(f"Background audio duration: {bg_audio.duration:.2f}s")
+        print(f"Duração do áudio de fundo: {bg_audio.duration:.2f}s")
         
-        # Adjust background audio to match video duration
+        # Ajustar áudio de fundo para corresponder à duração do vídeo
         if bg_audio.duration < video_duration:
-            # Loop the audio to match video duration
-            print(f"Looping background audio from {bg_audio.duration:.2f}s to {video_duration:.2f}s...")
+            # Fazer loop do áudio para corresponder à duração do vídeo
+            print(f"Fazendo loop do áudio de fundo de {bg_audio.duration:.2f}s para {video_duration:.2f}s...")
             
-            # Calculate how many repetitions we need
+            # Calcular quantas repetições precisamos
             repetitions = int(video_duration / bg_audio.duration) + 1
             
-            # Create list of audio clips to concatenate
+            # Criar lista de clipes de áudio para concatenar
             audio_clips = [bg_audio] * repetitions
             looped_audio = concatenate_audioclips(audio_clips)
             
-            # Trim to exact video duration
+            # Cortar para duração de vídeo exata
             bg_audio_adjusted = looped_audio.subclipped(0, video_duration)
         else:
-            # Cut audio to match video duration
-            print(f"Trimming background audio from {bg_audio.duration:.2f}s to {video_duration:.2f}s...")
+            # Cortar áudio para corresponder à duração do vídeo
+            print(f"Cortando áudio de fundo de {bg_audio.duration:.2f}s para {video_duration:.2f}s...")
             bg_audio_adjusted = bg_audio.subclipped(0, video_duration)
         
-        print(f"Adjusted background audio duration: {bg_audio_adjusted.duration:.2f}s")
+        print(f"Duração do áudio de fundo ajustada: {bg_audio_adjusted.duration:.2f}s")
         audio_streams.append(bg_audio_adjusted.with_start(0))
     
-    # Mix all audio streams
+    # Misturar todos os fluxos de áudio
     if audio_streams:
         if len(audio_streams) > 1:
-            print(f"\nMixing {len(audio_streams)} audio tracks together...")
+            print(f"\nMisturando {len(audio_streams)} faixas de áudio juntas...")
             final_audio = CompositeAudioClip(audio_streams)
         else:
             final_audio = audio_streams[0]
         
         final = final.with_audio(final_audio)
     
-    print(f"Writing to: {output_path}")
+    print(f"Escrevendo para: {output_path}")
     
     output_path.parent.mkdir(parents=True, exist_ok=True)
-    
-    # Embed subtitles if provided
-    if subtitle_segments:
-        # Write temp video without subtitles first
-        temp_output = output_path.parent / "temp_no_subtitles.mp4"
-        final.write_videofile(str(temp_output), fps=target_fps, codec='libx264', audio_codec='aac')
-        
-        # Embed subtitles
-        embed_subtitles(temp_output, subtitle_segments, output_path)
-        
-        # Clean up temp file - use try-except in case file is still in use
-        try:
-            temp_output.unlink()
-        except Exception as e:
-            print(f"Warning: Could not delete temp file {temp_output}: {e}")
-    else:
-        final.write_videofile(str(output_path), fps=target_fps, codec='libx264', audio_codec='aac')
-        print(f"Success: {output_path}")
+    final.write_videofile(str(output_path), fps=target_fps, codec='libx264', audio_codec='aac')
+    print(f"Sucesso: {output_path}")
     
     video1.close()
     video2.close()
