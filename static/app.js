@@ -23,6 +23,7 @@ const videoPreview = document.getElementById('video-preview');
 const trimStart = document.getElementById('trim-start');
 const trimEnd = document.getElementById('trim-end');
 const outputName = document.getElementById('output-name');
+const noBackgroundSong = document.getElementById('no-background-song');
 const progressFill = document.getElementById('progress-fill');
 const progressText = document.getElementById('progress-text');
 
@@ -121,7 +122,8 @@ async function handleProcessClick() {
             video_path: appState.videoPath,
             trim_start: parseInt(trimStart.value) || 0,
             trim_end: parseInt(trimEnd.value) || 0,
-            output_name: outputFileName
+            output_name: outputFileName,
+            no_background_song: noBackgroundSong.checked
         };
 
         // Enviar requisição de processamento

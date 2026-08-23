@@ -14,6 +14,7 @@ const videoPreview = document.getElementById('video-preview');
 const trimStart = document.getElementById('trim-start');
 const trimEnd = document.getElementById('trim-end');
 const outputName = document.getElementById('output-name');
+const noBackgroundSong = document.getElementById('no-background-song');
 const progressFill = document.getElementById('progress-fill');
 const progressText = document.getElementById('progress-text');
 const resultContainer = document.getElementById('result-container');
@@ -54,6 +55,7 @@ processBtn.addEventListener('click', async function () {
     const outName = outputName.value.trim() || 'video_editado.mp4';
     const tStart = parseInt(trimStart.value) || 0;
     const tEnd = parseInt(trimEnd.value) || 0;
+    const noAudio = noBackgroundSong.checked;
 
     // Desabilitar botão e mostrar progresso
     processBtn.disabled = true;
@@ -62,7 +64,7 @@ processBtn.addEventListener('click', async function () {
     updateProgress(5, 'Iniciando...');
 
     try {
-        const result = await pywebview.api.process_video(videoPath, tStart, tEnd, outName);
+        const result = await pywebview.api.process_video(videoPath, tStart, tEnd, outName, noAudio);
 
         if (!result.success) {
             progressContainer.style.display = 'none';

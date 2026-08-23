@@ -136,7 +136,7 @@ class Api:
             'output_file': self._output_file
         }
 
-    def process_video(self, video_path, trim_start, trim_end, output_name):
+    def process_video(self, video_path, trim_start, trim_end, output_name, no_background_song=False):
         """Iniciar processamento de vídeo em thread separada."""
         if self._status == 'processing':
             return {'success': False, 'error': 'Já existe um processamento em andamento'}
@@ -153,7 +153,7 @@ class Api:
             output_name += '.mp4'
 
         output_path = str(OUTPUT_DIR / output_name)
-        audio_path = str(AUDIO_PATH) if AUDIO_PATH.exists() else None
+        audio_path = str(AUDIO_PATH) if (not no_background_song and AUDIO_PATH.exists()) else None
 
         self._status = 'processing'
         self._message = 'Iniciando...'

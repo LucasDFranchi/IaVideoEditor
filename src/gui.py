@@ -152,6 +152,9 @@ class VideoEditorGUI(QMainWindow):
         filename_layout.addWidget(self.filename_input, 1)
         process_layout.addLayout(filename_layout)
         
+        self.no_background_song_checkbox = QCheckBox("Remover música de fundo (para plataformas que não aceitam)")
+        process_layout.addWidget(self.no_background_song_checkbox)
+
         process_btn = QPushButton("Gerar Vídeo")
         process_btn.setStyleSheet("background-color: #4CAF50; color: white; font-weight: bold; padding: 10px;")
         process_btn.clicked.connect(self.process_video)
@@ -320,7 +323,7 @@ class VideoEditorGUI(QMainWindow):
         # Obter parâmetros
         start = self.start_spinbox.value()
         end = self.end_spinbox.value()
-        audio_path = str(media_dir / "audio" / "background_song.mp3")
+        audio_path = None if self.no_background_song_checkbox.isChecked() else str(media_dir / "audio" / "background_song.mp3")
         
         # Desativar botão e mostrar barra de progresso
         self.progress_bar.setVisible(True)
