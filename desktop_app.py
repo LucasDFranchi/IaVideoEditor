@@ -10,6 +10,7 @@ import os
 import re
 import sys
 import shutil
+import logging
 import threading
 import http.server
 import socketserver
@@ -20,7 +21,7 @@ import webview
 # Adicionar diretório raiz ao path
 sys.path.insert(0, str(Path(__file__).parent))
 
-from src.main import concat_videos
+from src.main import concat_videos, VideoTranscriber, embed_subtitles
 
 # Caminhos padrão (suporte a PyInstaller)
 if getattr(sys, 'frozen', False):
@@ -31,10 +32,24 @@ LOGO_PATH = BASE_DIR / 'media' / 'videos' / 'logo.mp4'
 AUDIO_PATH = BASE_DIR / 'media' / 'audio' / 'background_song.mp3'
 UPLOAD_DIR = BASE_DIR / 'uploads'
 OUTPUT_DIR = Path.home() / 'Desktop' / 'videos_formatados'
+LOG_DIR = Path(os.getenv('LOCALAPPDATA', Path.home())) / 'IAVideoEditor' / 'logs'
 
 # Criar pastas
 UPLOAD_DIR.mkdir(parents=True, exist_ok=True)
 OUTPUT_DIR.mkdir(parents=True, exist_ok=True)
+LOG_DIR.mkdir(parents=True, exist_ok=True)
+
+# Logging para arquivo (necessário pois o executável empacotado roda sem console visível)
+LOG_FILE = LOG_DIR / 'app.log'
+logging.basicConfig(
+    level=logging.INFO,
+    format='%(asctime)s [%(levelname)s] %(message)s',
+    handlers=[
+        logging.FileHandler(LOG_FILE, encoding='utf-8'),
+        logging.StreamHandler(sys.stdout),
+    ],
+)
+logger = logging.getLogger('iavideoeditor')
 
 
 # ============================================
@@ -136,7 +151,20 @@ class Api:
             'output_file': self._output_file
         }
 
-    def process_video(self, video_path, trim_start, trim_end, output_name, no_background_song=False):
+    def get_result_preview_url(self):
+        """Apontar o media server para o vídeo processado, para exibir o resultado editado."""
+        if self._status != 'completed' or not self._output_file:
+            return {'success': False}
+
+        output_path = str(OUTPUT_DIR / self._output_file)
+        if not os.path.exists(output_path):
+            return {'success': False}
+
+        MediaHandler.video_file = output_path
+        preview_url = f'http://127.0.0.1:{self._media_port}/video'
+        return {'success': True, 'preview_url': preview_url}
+
+    def process_video(self, video_path, trim_start, trim_end, output_name, no_background_song=False, add_subtitles=True, subtitle_position='top'):
         """Iniciar processamento de vídeo em thread separada."""
         if self._status == 'processing':
             return {'success': False, 'error': 'Já existe um processamento em andamento'}
@@ -164,23 +192,49 @@ class Api:
                 self._message = 'Carregando vídeos...'
                 self._progress = 10
 
-                print(f"\n{'='*60}")
-                print(f"PROCESSANDO VÍDEO")
-                print(f"Vídeo: {video_path}")
-                print(f"Logo: {LOGO_PATH}")
-                print(f"Áudio: {audio_path}")
-                print(f"Saída: {output_path}")
-                print(f"Trim: {trim_start}s - {trim_end}s")
-                print(f"{'='*60}\n")
-
-                concat_videos(
-                    video1_path=video_path,
-                    video2_path=str(LOGO_PATH),
-                    output_path=output_path,
-                    audio_path=audio_path,
-                    trim_start=int(trim_start),
-                    trim_end=int(trim_end)
+                logger.info(
+                    "Processando vídeo | video=%s logo=%s audio=%s saida=%s trim=%s-%s legendas=%s",
+                    video_path, LOGO_PATH, audio_path, output_path, trim_start, trim_end, add_subtitles
                 )
+
+                subtitle_segments = None
+                if add_subtitles:
+                    self._message = 'Gerando legendas (isso pode demorar)...'
+                    self._progress = 20
+                    subtitle_segments = VideoTranscriber().transcribe(video_path, 'pt')
+                    if subtitle_segments:
+                        subtitle_file = OUTPUT_DIR / 'subtitles' / f'{Path(output_name).stem}.srt'
+                        subtitle_file.parent.mkdir(parents=True, exist_ok=True)
+                        subtitle_file.write_text(VideoTranscriber.to_srt(subtitle_segments), encoding='utf-8')
+                    else:
+                        logger.warning("Legendas solicitadas mas não foi possível gerá-las (verifique se faster-whisper está instalado)")
+
+                if subtitle_segments:
+                    self._message = 'Concatenando vídeos...'
+                    self._progress = 40
+                    concat_temp = OUTPUT_DIR / f'_concat_temp_{os.getpid()}.mp4'
+                    concat_videos(
+                        video1_path=video_path,
+                        video2_path=str(LOGO_PATH),
+                        output_path=str(concat_temp),
+                        audio_path=audio_path,
+                        trim_start=int(trim_start),
+                        trim_end=int(trim_end)
+                    )
+
+                    self._message = 'Adicionando legendas...'
+                    self._progress = 80
+                    embed_subtitles(concat_temp, subtitle_segments, output_path, subtitle_position)
+                    concat_temp.unlink(missing_ok=True)
+                else:
+                    concat_videos(
+                        video1_path=video_path,
+                        video2_path=str(LOGO_PATH),
+                        output_path=output_path,
+                        audio_path=audio_path,
+                        trim_start=int(trim_start),
+                        trim_end=int(trim_end)
+                    )
 
                 if os.path.exists(output_path):
                     file_size = os.path.getsize(output_path) / (1024 * 1024)
@@ -188,20 +242,18 @@ class Api:
                     self._message = f'Vídeo salvo em {output_path} ({file_size:.1f} MB)'
                     self._progress = 100
                     self._output_file = output_name
-                    print(f"\n✅ SUCESSO: {output_path} ({file_size:.1f} MB)\n")
+                    logger.info("Sucesso: %s (%.1f MB)", output_path, file_size)
                 else:
                     self._status = 'error'
                     self._message = 'Erro: arquivo não foi criado'
                     self._progress = 0
-                    print(f"\n❌ ERRO: arquivo não criado em {output_path}\n")
+                    logger.error("Arquivo não criado em %s", output_path)
 
             except Exception as e:
                 self._status = 'error'
                 self._message = f'Erro: {str(e)}'
                 self._progress = 0
-                print(f"\n❌ ERRO: {e}\n")
-                import traceback
-                traceback.print_exc()
+                logger.exception("Falha ao processar vídeo")
 
         thread = threading.Thread(target=do_process)
         thread.start()
@@ -210,27 +262,31 @@ class Api:
 
 
 if __name__ == '__main__':
-    media_port = start_media_server()
-    api = Api(media_port)
+    try:
+        media_port = start_media_server()
+        api = Api(media_port)
 
-    window = webview.create_window(
-        title='Editor de Vídeo IA',
-        url=str(BASE_DIR / 'ui' / 'index.html'),
-        js_api=api,
-        width=1400,
-        height=900,
-        resizable=True,
-        maximized=True,
-        background_color='#f5f5f5'
-    )
+        window = webview.create_window(
+            title='Editor de Vídeo IA',
+            url=str(BASE_DIR / 'ui' / 'index.html'),
+            js_api=api,
+            width=1400,
+            height=900,
+            resizable=True,
+            maximized=True,
+            background_color='#f5f5f5'
+        )
 
-    print("="*60)
-    print("  Editor de Vídeo IA - Desktop")
-    print("="*60)
-    print(f"Logo: {LOGO_PATH} (exists: {LOGO_PATH.exists()})")
-    print(f"Audio: {AUDIO_PATH} (exists: {AUDIO_PATH.exists()})")
-    print(f"Output: {OUTPUT_DIR}")
-    print(f"Media server: http://127.0.0.1:{media_port}")
-    print("="*60)
+        logger.info("=" * 60)
+        logger.info("Editor de Vídeo IA - Desktop")
+        logger.info("Logo: %s (exists: %s)", LOGO_PATH, LOGO_PATH.exists())
+        logger.info("Audio: %s (exists: %s)", AUDIO_PATH, AUDIO_PATH.exists())
+        logger.info("Output: %s", OUTPUT_DIR)
+        logger.info("Log file: %s", LOG_FILE)
+        logger.info("Media server: http://127.0.0.1:%s", media_port)
+        logger.info("=" * 60)
 
-    webview.start(debug=False)
+        webview.start(debug=False)
+    except Exception:
+        logger.exception("Falha fatal ao iniciar a aplicação")
+        raise

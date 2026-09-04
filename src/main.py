@@ -11,6 +11,22 @@ LOGO_VIDEO = MEDIA_DIR / "videos" / "logo.mp4"
 BACKGROUND_SONG = MEDIA_DIR / "audio" / "background_song.mp3"
 OUTPUT_DIR = MEDIA_DIR / "output"
 SUBTITLES_DIR = OUTPUT_DIR / "subtitles"
+BACKGROUND_AUDIO_GAIN = 0.1  # volume relativo da música de fundo em relação ao áudio original
+SUBTITLE_FONT = MEDIA_DIR / "fonts" / "Anton-Regular.ttf"
+
+# Estilo de legenda (estilo VEED: palavra ativa em destaque)
+SUBTITLE_FONT_SIZE = 48
+SUBTITLE_COLOR = "white"
+SUBTITLE_HIGHLIGHT_COLOR = "#3A96FF"  # vermelho
+SUBTITLE_STROKE_COLOR = "black"
+SUBTITLE_STROKE_WIDTH = 3
+
+# Posição vertical da legenda na tela (fração da altura do vídeo)
+SUBTITLE_POSITIONS = {
+    "top": 0.08,
+    "middle": 0.45,
+    "bottom": 0.75,
+}
 
 
 def break_into_small_lines(text: str, max_chars: int = 50) -> str:
@@ -48,119 +64,217 @@ def break_into_small_lines(text: str, max_chars: int = 50) -> str:
     return '\n'.join(lines)
 
 
-def generate_subtitles(video_path: Path, subtitle_path: Path, language: str = "pt") -> list:
-    """Gerar subtítulos do áudio do vídeo usando openai-whisper (LIVRE, código aberto, sem chaves de API necessárias).
-    
-    Args:
-        video_path: Caminho para o arquivo de vídeo
-        subtitle_path: Caminho para salvar subtítulos SRT (para backup, não utilizado no vídeo)
-        language: Código de idioma (padrão: "pt" para Português)
-        
-    Returns:
-        Lista de segmentos de subtítulo com chaves 'start', 'end' e 'text'
+class VideoTranscriber:
+    """Transcreve o áudio de um vídeo usando faster-whisper (LIVRE, código aberto, sem chaves de API).
+
+    O modelo é carregado uma única vez por instância e reutilizado entre chamadas a transcribe().
     """
-    # Garantir que os caminhos sejam objetos Path
-    video_path = Path(video_path) if not isinstance(video_path, Path) else video_path
-    subtitle_path = Path(subtitle_path) if not isinstance(subtitle_path, Path) else subtitle_path
-    
-    try:
-        import whisper
-        import librosa
-    except ImportError:
-        print("Erro: Módulos necessários não encontrados. Instale com: pip install openai-whisper librosa")
-        return None
-    
-    import tempfile
-    
-    print(f"\nGerando subtítulos ({language})...")
-    
-    # Extrair áudio do vídeo usando moviepy
-    print("Extraindo áudio do vídeo...")
-    video = VideoFileClip(str(video_path))
-    temp_dir = Path(tempfile.gettempdir())
-    temp_audio = temp_dir / "whisper_temp_audio.mp3"
-    
-    try:
-        video.audio.write_audiofile(str(temp_audio))
-        
-        print(f"Carregando modelo Whisper...")
-        model = whisper.load_model("base")
-        
-        print(f"Transcrevendo áudio...")
-        # Carregar áudio usando librosa e passar como array numpy
-        audio_data, sr = librosa.load(str(temp_audio), sr=16000)
-        result = model.transcribe(audio_data, language=language)
-        
-        # Converter para formato de segmentos correspondente ao saída do faster-whisper
+
+    def __init__(self, model_size: str = "small", device: str = "cpu", compute_type: str = "int8"):
+        self.model_size = model_size
+        self.device = device
+        self.compute_type = compute_type
+        self._model = None
+
+    def _load_model(self):
+        if self._model is None:
+            from faster_whisper import WhisperModel
+            print("Carregando modelo Whisper...")
+            self._model = WhisperModel(self.model_size, device=self.device, compute_type=self.compute_type)
+        return self._model
+
+    def transcribe(self, video_path: Path, language: str = "pt") -> list:
+        """Transcrever um vídeo (.mp4) e retornar os segmentos de legenda.
+
+        Args:
+            video_path: Caminho para o arquivo de vídeo
+            language: Código de idioma (padrão: "pt" para Português)
+
+        Returns:
+            Lista de segmentos: [{"start", "end", "text", "words": [{"start", "end", "word"}]}]
+            None se o faster-whisper não estiver instalado.
+        """
+        video_path = Path(video_path) if not isinstance(video_path, Path) else video_path
+
+        try:
+            model = self._load_model()
+        except ImportError:
+            print("Erro: Módulo necessário não encontrado. Instale com: pip install faster-whisper")
+            return None
+
+        print(f"\nGerando subtítulos ({language})...")
+        print("Transcrevendo áudio...")
+        # faster-whisper lê o áudio diretamente do arquivo de vídeo (via ffmpeg), sem extração manual
+        segments, info = model.transcribe(str(video_path), language=language, word_timestamps=True)
+
         segments_list = []
-        for segment in result["segments"]:
+        for segment in segments:
+            words = [
+                {"start": w.start, "end": w.end, "word": w.word.strip()}
+                for w in (segment.words or [])
+                if w.word.strip()
+            ]
             segments_list.append({
-                "start": segment["start"],
-                "end": segment["end"],
-                "text": segment["text"].strip()
+                "start": segment.start,
+                "end": segment.end,
+                "text": segment.text.strip(),
+                "words": words
             })
-        
+
         print(f"Transcrição de {len(segments_list)} segmentos")
         return segments_list
-    finally:
-        video.close()
-        # Limpar arquivo de áudio temporário
-        if temp_audio.exists():
-            temp_audio.unlink()
+
+    @staticmethod
+    def to_srt(segments: list) -> str:
+        """Converter segmentos de legenda em texto no formato SRT."""
+
+        def format_timestamp(seconds: float) -> str:
+            hours = int(seconds // 3600)
+            minutes = int((seconds % 3600) // 60)
+            secs = int(seconds % 60)
+            millis = int(round((seconds - int(seconds)) * 1000))
+            return f"{hours:02d}:{minutes:02d}:{secs:02d},{millis:03d}"
+
+        lines = []
+        for index, segment in enumerate(segments, start=1):
+            lines.append(str(index))
+            lines.append(f"{format_timestamp(segment['start'])} --> {format_timestamp(segment['end'])}")
+            lines.append(segment["text"])
+            lines.append("")
+
+        return "\n".join(lines)
 
 
-def embed_subtitles(video_path: Path, segments: list, output_path: Path) -> None:
-    """Embed subtitle text directly onto video frames.
-    
+def _group_words(words: list, font, space_width: float, max_width: float, max_words: int = 6) -> list:
+    """Agrupar palavras cronometradas em pequenos grupos exibidos juntos na tela.
+
+    Agrupa por largura real renderizada (não por contagem de caracteres), para
+    garantir que cada grupo caiba dentro da largura do vídeo.
+
+    Args:
+        words: Lista de palavras com chaves 'word', 'start', 'end'
+        font: PIL ImageFont usado para medir a largura das palavras
+        space_width: Largura em pixels de um espaço nesta fonte
+        max_width: Largura máxima em pixels disponível para um grupo
+        max_words: Máximo de palavras por grupo
+
+    Returns:
+        Lista de grupos (cada grupo é uma lista de palavras)
+    """
+    groups = []
+    current = []
+    current_width = 0.0
+
+    for word in words:
+        word_width = font.getlength(word["word"].strip().upper())
+        added_width = word_width if not current else current_width + space_width + word_width
+
+        if current and (len(current) >= max_words or added_width > max_width):
+            groups.append(current)
+            current = []
+            added_width = word_width
+
+        current.append(word)
+        current_width = added_width
+
+    if current:
+        groups.append(current)
+
+    return groups
+
+
+def embed_subtitles(video_path: Path, segments: list, output_path: Path, position: str = "top") -> None:
+    """Embed karaoke-style subtitles onto video frames (VEED-style: active word highlighted in green).
+
     Args:
         video_path: Path to video file
-        segments: List of subtitle segments from faster-whisper
+        segments: List of subtitle segments from generate_subtitles(), each with word-level timestamps
         output_path: Path to save video with embedded subtitles
+        position: Posição vertical da legenda: "top", "middle" ou "bottom" (padrão)
     """
+    from PIL import ImageFont
+
     # Ensure paths are Path objects
     video_path = Path(video_path) if not isinstance(video_path, Path) else video_path
     output_path = Path(output_path) if not isinstance(output_path, Path) else output_path
-    
+
     print(f"\nEmbedding subtitles into video...")
     video = VideoFileClip(str(video_path))
-    
+
+    font = ImageFont.truetype(str(SUBTITLE_FONT), SUBTITLE_FONT_SIZE)
+    space_width = font.getlength(" ")
+    position_fraction = SUBTITLE_POSITIONS.get(position, SUBTITLE_POSITIONS["bottom"])
+    y_pos = int(video.h * position_fraction)
+    max_group_width = video.w * 0.9
+
+    # moviepy calcula a altura do TextClip a partir de font.getmetrics() (ascent + descent),
+    # que subestima a altura real dos glifos desta fonte e corta a base do texto (ex: o rabinho
+    # do "Ç"). Damos uma altura explícita com folga para evitar o corte.
+    clip_height = int(SUBTITLE_FONT_SIZE * 1.6)
+
+    def make_word_clip(text, color, start, end, x, y):
+        return (
+            TextClip(
+                text=text,
+                font=str(SUBTITLE_FONT),
+                font_size=SUBTITLE_FONT_SIZE,
+                color=color,
+                stroke_color=SUBTITLE_STROKE_COLOR,
+                stroke_width=SUBTITLE_STROKE_WIDTH,
+                size=(None, clip_height),
+                # "top" fixa a linha de base no mesmo ponto para todas as palavras.
+                # Com "center" (padrão), palavras acentuadas (Ã, É...) ficam mais altas
+                # que as sem acento, pois o moviepy centraliza a caixa de texto inteira
+                # (incluindo o acento) em vez de alinhar pela linha de base.
+                vertical_align="top",
+            )
+            .with_position((x, y))
+            .with_start(start)
+            .with_end(end)
+        )
+
     # Create text clips for each subtitle
     caption_clips = []
-    
+
     for segment in segments:
-        txt = segment["text"].strip()
-        
-        if not txt:  # Skip empty segments
-            continue
-        
-        # Create caption clip with automatic wrapping
-        caption = (
-            TextClip(
-                text=txt,
-                font_size=50,
-                size=(int(video.w * 0.8), None),  # 80% of video width for automatic wrapping
-                method="caption",  # Enables word wrapping
-                color='white',
-                stroke_color='black',
-                stroke_width=2
-            )
-            .with_position(("center", "bottom"))  # Centered horizontally, positioned at bottom
-            .with_start(segment["start"])
-            .with_end(segment["end"])
-        )
-        
-        caption_clips.append(caption)
-    
+        words = segment.get("words") or []
+        if not words:
+            txt = segment["text"].strip()
+            if txt:
+                words = [{"word": txt, "start": segment["start"], "end": segment["end"]}]
+
+        for group in _group_words(words, font, space_width, max_group_width):
+            group_start = group[0]["start"]
+            group_end = group[-1]["end"]
+
+            texts = [w["word"].upper() for w in group]
+            widths = [font.getlength(t) for t in texts]
+            total_width = sum(widths) + space_width * (len(group) - 1)
+            x = video.w / 2 - total_width / 2
+            # Segurança: nunca deixar o grupo sair da área visível do vídeo
+            x = max(0, min(x, max(0, video.w - total_width)))
+
+            for word, text, width in zip(group, texts, widths):
+                # Base: palavra em branco durante todo o grupo
+                caption_clips.append(
+                    make_word_clip(text, SUBTITLE_COLOR, group_start, group_end, x, y_pos)
+                )
+                # Destaque: palavra em verde apenas enquanto está sendo falada
+                caption_clips.append(
+                    make_word_clip(text, SUBTITLE_HIGHLIGHT_COLOR, word["start"], word["end"], x, y_pos)
+                )
+                x += width + space_width
+
     # Composite video with captions
     if caption_clips:
         final_video = CompositeVideoClip([video] + caption_clips)
     else:
         final_video = video
-    
+
     # Write output
     print(f"Writing video with embedded subtitles to: {output_path}")
     final_video.write_videofile(str(output_path), fps=video.fps, codec='libx264', audio_codec='aac')
-    
+
     video.close()
     print(f"Success: Video with embedded subtitles saved to {output_path}")
 
@@ -256,7 +370,8 @@ def concat_videos(video1_path: Path, video2_path: Path, output_path: Path, audio
             print(f"Cortando áudio de fundo de {bg_audio.duration:.2f}s para {video_duration:.2f}s...")
             bg_audio_adjusted = bg_audio.subclipped(0, video_duration)
         
-        print(f"Duração do áudio de fundo ajustada: {bg_audio_adjusted.duration:.2f}s")
+        bg_audio_adjusted = bg_audio_adjusted.with_volume_scaled(BACKGROUND_AUDIO_GAIN)
+        print(f"Duração do áudio de fundo ajustada: {bg_audio_adjusted.duration:.2f}s (volume: {BACKGROUND_AUDIO_GAIN})")
         audio_streams.append(bg_audio_adjusted.with_start(0))
     
     # Misturar todos os fluxos de áudio
@@ -287,6 +402,7 @@ def main() -> None:
     parser.add_argument("--no-audio", action="store_true", help="Disable background audio")
     parser.add_argument("--subtitles", action="store_true", help="Generate subtitles from audio")
     parser.add_argument("--lang", type=str, default="pt", help="Language for subtitles (default: pt for Portuguese)")
+    parser.add_argument("--subtitle-position", type=str, default="top", choices=["top", "middle", "bottom"], help="Vertical position of subtitles (default: top)")
     
     args = parser.parse_args()
     
@@ -318,15 +434,26 @@ def main() -> None:
     
     try:
         audio = None if args.no_audio else BACKGROUND_SONG
-        
+
         # Generate subtitles first if requested (from the overlay video)
         subtitle_segments = None
         if args.subtitles:
-            subtitle_file = SUBTITLES_DIR / f"final_output_{args.lang}.srt"
-            subtitle_segments = generate_subtitles(overlay_path, subtitle_file, args.lang)
-        
-        # Concatenate videos with optional embedded subtitles
-        concat_videos(overlay_path, LOGO_VIDEO, output_file, audio, args.start, args.end, subtitle_segments)
+            if args.start > 0 or args.end > 0:
+                print("Aviso: legendas com corte (--start/--end) podem ficar dessincronizadas.")
+            subtitle_segments = VideoTranscriber().transcribe(overlay_path, args.lang)
+            if subtitle_segments:
+                subtitle_file = SUBTITLES_DIR / f"final_output_{args.lang}.srt"
+                subtitle_file.parent.mkdir(parents=True, exist_ok=True)
+                subtitle_file.write_text(VideoTranscriber.to_srt(subtitle_segments), encoding="utf-8")
+
+        if subtitle_segments:
+            concat_output = OUTPUT_DIR / "_concat_temp.mp4"
+            concat_videos(overlay_path, LOGO_VIDEO, concat_output, audio, args.start, args.end)
+            embed_subtitles(concat_output, subtitle_segments, output_file, args.subtitle_position)
+            concat_output.unlink(missing_ok=True)
+        else:
+            # Concatenate videos (sem legendas)
+            concat_videos(overlay_path, LOGO_VIDEO, output_file, audio, args.start, args.end)
     except Exception as e:
         print(f"Error: {e}")
         import traceback

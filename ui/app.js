@@ -15,6 +15,8 @@ const trimStart = document.getElementById('trim-start');
 const trimEnd = document.getElementById('trim-end');
 const outputName = document.getElementById('output-name');
 const noBackgroundSong = document.getElementById('no-background-song');
+const noSubtitles = document.getElementById('no-subtitles');
+const subtitlePosition = document.getElementById('subtitle-position');
 const progressFill = document.getElementById('progress-fill');
 const progressText = document.getElementById('progress-text');
 const resultContainer = document.getElementById('result-container');
@@ -52,10 +54,12 @@ processBtn.addEventListener('click', async function () {
         return;
     }
 
-    const outName = outputName.value.trim() || 'video_editado.mp4';
+    const outName = outputName.value.trim() || 'video_editado';
     const tStart = parseInt(trimStart.value) || 0;
     const tEnd = parseInt(trimEnd.value) || 0;
     const noAudio = noBackgroundSong.checked;
+    const wantSubtitles = !noSubtitles.checked;
+    const subPosition = subtitlePosition.value;
 
     // Desabilitar botão e mostrar progresso
     processBtn.disabled = true;
@@ -64,7 +68,7 @@ processBtn.addEventListener('click', async function () {
     updateProgress(5, 'Iniciando...');
 
     try {
-        const result = await pywebview.api.process_video(videoPath, tStart, tEnd, outName, noAudio);
+        const result = await pywebview.api.process_video(videoPath, tStart, tEnd, outName, noAudio, wantSubtitles, subPosition);
 
         if (!result.success) {
             progressContainer.style.display = 'none';
@@ -107,10 +111,21 @@ async function monitorProgress() {
 
             } else if (status.status === 'completed') {
                 updateProgress(100, 'Concluído!');
-                setTimeout(() => {
+                setTimeout(async () => {
                     progressContainer.style.display = 'none';
                     showResult('success', status.message || 'Vídeo salvo com sucesso!');
                     processBtn.disabled = false;
+
+                    // Trocar o preview para mostrar o vídeo editado (resultado final)
+                    try {
+                        const preview = await pywebview.api.get_result_preview_url();
+                        if (preview.success) {
+                            videoPreview.src = preview.preview_url;
+                            videoPreview.load();
+                        }
+                    } catch (e) {
+                        console.error('Erro ao carregar preview do vídeo editado:', e);
+                    }
                 }, 500);
 
             } else if (status.status === 'error') {

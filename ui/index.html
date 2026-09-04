@@ -58,13 +58,27 @@
                         </div>
                         <div class="config-group">
                             <label for="output-name">Nome do Arquivo de Saída</label>
-                            <input type="text" id="output-name" value="video_editado.mp4" class="input-text" placeholder="video_editado.mp4">
+                            <input type="text" id="output-name" value="video_editado" class="input-text" placeholder="video_editado">
                         </div>
                         <div class="config-group config-group-checkbox">
                             <label for="no-background-song">
                                 <input type="checkbox" id="no-background-song">
                                 Remover música de fundo (para plataformas que não aceitam)
                             </label>
+                        </div>
+                        <div class="config-group config-group-checkbox">
+                            <label for="no-subtitles">
+                                <input type="checkbox" id="no-subtitles">
+                                Remover legendas automáticas
+                            </label>
+                        </div>
+                        <div class="config-group">
+                            <label for="subtitle-position">Posição da legenda</label>
+                            <select id="subtitle-position" class="input-text">
+                                <option value="top" selected>Topo</option>
+                                <option value="middle">Meio</option>
+                                <option value="bottom">Embaixo</option>
+                            </select>
                         </div>
                     </div>
                 </div>
