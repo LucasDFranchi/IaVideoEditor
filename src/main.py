@@ -12,6 +12,8 @@ BACKGROUND_SONG = MEDIA_DIR / "audio" / "background_song.mp3"
 OUTPUT_DIR = MEDIA_DIR / "output"
 SUBTITLES_DIR = OUTPUT_DIR / "subtitles"
 BACKGROUND_AUDIO_GAIN = 0.1  # volume relativo da música de fundo em relação ao áudio original
+OUTPUT_RESOLUTION = (1080, 1920)  # 1080p vertical (9:16), exigido pelo Instagram Reels
+OUTPUT_BITRATE = "8000k"
 SUBTITLE_FONT = MEDIA_DIR / "fonts" / "Anton-Regular.ttf"
 
 # Estilo de legenda (estilo VEED: palavra ativa em destaque)
@@ -323,16 +325,16 @@ def concat_videos(video1_path: Path, video2_path: Path, output_path: Path, audio
     
     # Garantir que os vídeos tenham fps e tamanho correspondentes
     target_fps = video1.fps
-    target_size = video1.size
-    
-    print(f"\nNota: O Vídeo 2 será redimensionado para {target_size} para correspondencer ao Vídeo 1")
-    
-    # Definir novo tamanho mas manter duração original
+    target_size = OUTPUT_RESOLUTION
+
+    print(f"\nNota: Ambos os vídeos serão redimensionados para {target_size} (1080p)")
+
+    video1_resized = video1.resized((target_size[0], target_size[1]))
     video2_resized = video2.resized((target_size[0], target_size[1]))
     print(f"Duração do Vídeo 2 após redimensionamento: {video2_resized.duration:.2f}s (deve ainda ser {video2.duration:.2f}s)")
-    
+
     # Concatenar
-    final = concatenate_videoclips([video1, video2_resized])
+    final = concatenate_videoclips([video1_resized, video2_resized])
     
     print(f"Duração final após concatenação: {final.duration:.2f}s (esperado: {video1.duration + video2.duration:.2f}s)")
     
@@ -387,7 +389,7 @@ def concat_videos(video1_path: Path, video2_path: Path, output_path: Path, audio
     print(f"Escrevendo para: {output_path}")
     
     output_path.parent.mkdir(parents=True, exist_ok=True)
-    final.write_videofile(str(output_path), fps=target_fps, codec='libx264', audio_codec='aac')
+    final.write_videofile(str(output_path), fps=target_fps, codec='libx264', audio_codec='aac', bitrate=OUTPUT_BITRATE)
     print(f"Sucesso: {output_path}")
     
     video1.close()
