@@ -185,7 +185,8 @@ def _group_words(words: list, font, space_width: float, max_width: float, max_wo
     return groups
 
 
-def embed_subtitles(video_path: Path, segments: list, output_path: Path, position: str = "top") -> None:
+def embed_subtitles(video_path: Path, segments: list, output_path: Path, position: str = "top",
+                     font_size: int = None, color: str = None) -> None:
     """Embed karaoke-style subtitles onto video frames (VEED-style: active word highlighted in green).
 
     Args:
@@ -193,6 +194,8 @@ def embed_subtitles(video_path: Path, segments: list, output_path: Path, positio
         segments: List of subtitle segments from generate_subtitles(), each with word-level timestamps
         output_path: Path to save video with embedded subtitles
         position: Posição vertical da legenda: "top", "middle" ou "bottom" (padrão)
+        font_size: Tamanho da fonte da legenda (padrão: SUBTITLE_FONT_SIZE)
+        color: Cor da legenda em estado normal, ex: "white" ou "#FFFFFF" (padrão: SUBTITLE_COLOR)
     """
     from PIL import ImageFont
 
@@ -200,10 +203,13 @@ def embed_subtitles(video_path: Path, segments: list, output_path: Path, positio
     video_path = Path(video_path) if not isinstance(video_path, Path) else video_path
     output_path = Path(output_path) if not isinstance(output_path, Path) else output_path
 
+    font_size = font_size or SUBTITLE_FONT_SIZE
+    color = color or SUBTITLE_COLOR
+
     print(f"\nEmbedding subtitles into video...")
     video = VideoFileClip(str(video_path))
 
-    font = ImageFont.truetype(str(SUBTITLE_FONT), SUBTITLE_FONT_SIZE)
+    font = ImageFont.truetype(str(SUBTITLE_FONT), font_size)
     space_width = font.getlength(" ")
     position_fraction = SUBTITLE_POSITIONS.get(position, SUBTITLE_POSITIONS["bottom"])
     y_pos = int(video.h * position_fraction)
@@ -212,15 +218,15 @@ def embed_subtitles(video_path: Path, segments: list, output_path: Path, positio
     # moviepy calcula a altura do TextClip a partir de font.getmetrics() (ascent + descent),
     # que subestima a altura real dos glifos desta fonte e corta a base do texto (ex: o rabinho
     # do "Ç"). Damos uma altura explícita com folga para evitar o corte.
-    clip_height = int(SUBTITLE_FONT_SIZE * 1.6)
+    clip_height = int(font_size * 1.6)
 
-    def make_word_clip(text, color, start, end, x, y):
+    def make_word_clip(text, word_color, start, end, x, y):
         return (
             TextClip(
                 text=text,
                 font=str(SUBTITLE_FONT),
-                font_size=SUBTITLE_FONT_SIZE,
-                color=color,
+                font_size=font_size,
+                color=word_color,
                 stroke_color=SUBTITLE_STROKE_COLOR,
                 stroke_width=SUBTITLE_STROKE_WIDTH,
                 size=(None, clip_height),
@@ -259,7 +265,7 @@ def embed_subtitles(video_path: Path, segments: list, output_path: Path, positio
             for word, text, width in zip(group, texts, widths):
                 # Base: palavra em branco durante todo o grupo
                 caption_clips.append(
-                    make_word_clip(text, SUBTITLE_COLOR, group_start, group_end, x, y_pos)
+                    make_word_clip(text, color, group_start, group_end, x, y_pos)
                 )
                 # Destaque: palavra em verde apenas enquanto está sendo falada
                 caption_clips.append(

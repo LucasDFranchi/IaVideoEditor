@@ -266,6 +266,31 @@ video#video-preview {
     box-shadow: 0 0 0 3px rgba(33, 150, 243, 0.1);
 }
 
+.color-swatches {
+    display: flex;
+    gap: 10px;
+    flex-wrap: wrap;
+}
+
+.color-swatch {
+    width: 32px;
+    height: 32px;
+    border-radius: 50%;
+    border: 2px solid var(--border-color);
+    cursor: pointer;
+    padding: 0;
+    transition: transform 0.15s, border-color 0.15s, box-shadow 0.15s;
+}
+
+.color-swatch:hover {
+    transform: scale(1.1);
+}
+
+.color-swatch.active {
+    border-color: var(--primary-color);
+    box-shadow: 0 0 0 3px rgba(33, 150, 243, 0.25);
+}
+
 /* Button Styles */
 .btn {
     padding: 10px 16px;

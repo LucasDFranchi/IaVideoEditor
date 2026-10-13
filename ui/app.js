@@ -17,6 +17,22 @@ const outputName = document.getElementById('output-name');
 const noBackgroundSong = document.getElementById('no-background-song');
 const noSubtitles = document.getElementById('no-subtitles');
 const subtitlePosition = document.getElementById('subtitle-position');
+const subtitleFontSize = document.getElementById('subtitle-font-size');
+const subtitleColor = document.getElementById('subtitle-color');
+const subtitleColorSwatches = document.getElementById('subtitle-color-swatches');
+
+// ============================================
+// Paleta de cores da legenda
+// ============================================
+
+subtitleColorSwatches.addEventListener('click', function (e) {
+    const swatch = e.target.closest('.color-swatch');
+    if (!swatch) return;
+
+    subtitleColorSwatches.querySelectorAll('.color-swatch').forEach(s => s.classList.remove('active'));
+    swatch.classList.add('active');
+    subtitleColor.value = swatch.dataset.color;
+});
 const progressFill = document.getElementById('progress-fill');
 const progressText = document.getElementById('progress-text');
 const resultContainer = document.getElementById('result-container');
@@ -60,6 +76,8 @@ processBtn.addEventListener('click', async function () {
     const noAudio = noBackgroundSong.checked;
     const wantSubtitles = !noSubtitles.checked;
     const subPosition = subtitlePosition.value;
+    const subFontSize = parseInt(subtitleFontSize.value) || 48;
+    const subColor = subtitleColor.value;
 
     // Desabilitar botão e mostrar progresso
     processBtn.disabled = true;
@@ -68,7 +86,7 @@ processBtn.addEventListener('click', async function () {
     updateProgress(5, 'Iniciando...');
 
     try {
-        const result = await pywebview.api.process_video(videoPath, tStart, tEnd, outName, noAudio, wantSubtitles, subPosition);
+        const result = await pywebview.api.process_video(videoPath, tStart, tEnd, outName, noAudio, wantSubtitles, subPosition, subFontSize, subColor);
 
         if (!result.success) {
             progressContainer.style.display = 'none';

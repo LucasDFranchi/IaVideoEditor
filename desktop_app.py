@@ -164,7 +164,7 @@ class Api:
         preview_url = f'http://127.0.0.1:{self._media_port}/video'
         return {'success': True, 'preview_url': preview_url}
 
-    def process_video(self, video_path, trim_start, trim_end, output_name, no_background_song=False, add_subtitles=True, subtitle_position='top'):
+    def process_video(self, video_path, trim_start, trim_end, output_name, no_background_song=False, add_subtitles=True, subtitle_position='top', subtitle_font_size=None, subtitle_color=None):
         """Iniciar processamento de vídeo em thread separada."""
         if self._status == 'processing':
             return {'success': False, 'error': 'Já existe um processamento em andamento'}
@@ -182,6 +182,7 @@ class Api:
 
         output_path = str(OUTPUT_DIR / output_name)
         audio_path = str(AUDIO_PATH) if (not no_background_song and AUDIO_PATH.exists()) else None
+        subtitle_font_size = int(subtitle_font_size) if subtitle_font_size else None
 
         self._status = 'processing'
         self._message = 'Iniciando...'
@@ -224,7 +225,7 @@ class Api:
 
                     self._message = 'Adicionando legendas...'
                     self._progress = 80
-                    embed_subtitles(concat_temp, subtitle_segments, output_path, subtitle_position)
+                    embed_subtitles(concat_temp, subtitle_segments, output_path, subtitle_position, subtitle_font_size, subtitle_color)
                     concat_temp.unlink(missing_ok=True)
                 else:
                     concat_videos(

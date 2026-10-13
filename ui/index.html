@@ -80,6 +80,23 @@
                                 <option value="bottom">Embaixo</option>
                             </select>
                         </div>
+                        <div class="config-group">
+                            <label for="subtitle-font-size">Tamanho da fonte da legenda</label>
+                            <input type="number" id="subtitle-font-size" min="10" max="150" value="48" class="input-number">
+                        </div>
+                        <div class="config-group">
+                            <label>Cor da legenda</label>
+                            <div class="color-swatches" id="subtitle-color-swatches">
+                                <button type="button" class="color-swatch active" data-color="#FFFFFF" style="background:#FFFFFF" title="Branco"></button>
+                                <button type="button" class="color-swatch" data-color="#FFD60A" style="background:#FFD60A" title="Amarelo"></button>
+                                <button type="button" class="color-swatch" data-color="#FF9F0A" style="background:#FF9F0A" title="Laranja"></button>
+                                <button type="button" class="color-swatch" data-color="#FF453A" style="background:#FF453A" title="Vermelho"></button>
+                                <button type="button" class="color-swatch" data-color="#FF375F" style="background:#FF375F" title="Rosa"></button>
+                                <button type="button" class="color-swatch" data-color="#32D74B" style="background:#32D74B" title="Verde"></button>
+                                <button type="button" class="color-swatch" data-color="#64D2FF" style="background:#64D2FF" title="Azul"></button>
+                            </div>
+                            <input type="hidden" id="subtitle-color" value="#FFFFFF">
+                        </div>
                     </div>
                 </div>
 
