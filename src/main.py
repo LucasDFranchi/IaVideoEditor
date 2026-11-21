@@ -26,7 +26,9 @@ SUBTITLE_STROKE_WIDTH = 3
 # Posição vertical da legenda na tela (fração da altura do vídeo)
 SUBTITLE_POSITIONS = {
     "top": 0.08,
+    "top-middle": 0.265,
     "middle": 0.45,
+    "middle-bottom": 0.6,
     "bottom": 0.75,
 }
 
@@ -410,7 +412,7 @@ def main() -> None:
     parser.add_argument("--no-audio", action="store_true", help="Disable background audio")
     parser.add_argument("--subtitles", action="store_true", help="Generate subtitles from audio")
     parser.add_argument("--lang", type=str, default="pt", help="Language for subtitles (default: pt for Portuguese)")
-    parser.add_argument("--subtitle-position", type=str, default="top", choices=["top", "middle", "bottom"], help="Vertical position of subtitles (default: top)")
+    parser.add_argument("--subtitle-position", type=str, default="top", choices=["top", "top-middle", "middle", "middle-bottom", "bottom"], help="Vertical position of subtitles (default: top)")
     
     args = parser.parse_args()
     
